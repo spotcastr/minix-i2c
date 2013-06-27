@@ -61,6 +61,9 @@ MINIX_TESTS+= \
 # LSC Not yet supported on ARM
 MKPIC:=		no
 LDSTATIC:=	-static
+
+MINIX_TESTS+= \
+                                          75
 .endif
 
 .for t in ${MINIX_TESTS}

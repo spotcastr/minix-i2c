@@ -651,6 +651,7 @@
 ./usr/include/minix/gpio.h		minix-sys
 ./usr/include/minix/hash.h		minix-sys
 ./usr/include/minix/hgfs.h		minix-sys
+./usr/include/minix/i2c.h		minix-sys
 ./usr/include/minix/input.h		minix-sys
 ./usr/include/minix/ioctl.h		minix-sys
 ./usr/include/minix/ipcconst.h		minix-sys
@@ -4653,6 +4654,7 @@
 ./usr/tests/minix-posix/test72		minix-sys
 ./usr/tests/minix-posix/test73		minix-sys
 ./usr/tests/minix-posix/test74		minix-sys
+./usr/tests/minix-posix/test75		minix-sys
 ./usr/tests/minix-posix/test7		minix-sys
 ./usr/tests/minix-posix/test8		minix-sys
 ./usr/tests/minix-posix/test9		minix-sys
