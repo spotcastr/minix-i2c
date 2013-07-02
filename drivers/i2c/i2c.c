@@ -177,9 +177,13 @@ i2c_other(message * m)
 		m->COUNT = MINIX_I2C_IOCTL_EXEC;
 		r = do_i2c_ioctl_exec(m);
 		break;
+	case NOTIFY_MESSAGE:
+		r = OK;
+		break;
 	default:
-		log_warn(&log, "Invalid message type\n");
+		log_warn(&log, "Invalid message type (%d)\n", m->m_type);
 		r = EINVAL;
+		break;
 	}
 
 	return r;

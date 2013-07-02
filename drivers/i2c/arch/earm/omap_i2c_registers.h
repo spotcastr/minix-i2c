@@ -126,10 +126,17 @@
 #define STP     1 /* I2C_CON */
 #define STT     0 /* I2C_CON */
 
+#define CLKACTIVITY_S 9 /* I2C_SYSC */
+#define CLKACTIVITY_I 8 /* I2C_SYSC */
+#define SMART_WAKE_UP 4 /* I2C_SYSC */
+#define NO_IDLE_MODE 3 /* I2C_SYSC */
 #define SRST     1 /* I2C_SYSC */
 #define AUTOIDLE 0 /* I2C_SYSC */
 
 #define RDONE 0 /* I2C_SYSS */
+
+#define RXFIFO_CLR 14 /* I2C_BUF */
+#define TXFIFO_CLR  6 /* I2C_BUF */
 
 #define BB   12 /* I2C_IRQSTATUS / I2C_STAT / I2C_IRQENABLE_SET / I2C_IE */
 #define ROVR 11 /* I2C_IRQSTATUS / I2C_STAT / I2C_IRQENABLE_SET / I2C_IE */
@@ -139,5 +146,18 @@
 #define ARDY  2 /* I2C_IRQSTATUS / I2C_STAT / I2C_IRQENABLE_SET / I2C_IE */
 #define NACK  1 /* I2C_IRQSTATUS / I2C_STAT / I2C_IRQENABLE_SET / I2C_IE */
 #define AL    0 /* I2C_IRQSTATUS / I2C_STAT / I2C_IRQENABLE_SET / I2C_IE */
+
+#define XDR_WE 14
+#define RDR_WE 13
+#define ROVR_WE 11
+#define XUDF_WE 10
+#define AAS_WE 9
+#define BF_WE 8
+#define STC_WE 6
+#define GC_WE 5
+#define DRDY_WE 3
+#define ARDY_WE 2
+#define NACK_WE 1
+#define AL_WE 0
 
 #endif /* _OMAP_I2C_REGISTERS_H */

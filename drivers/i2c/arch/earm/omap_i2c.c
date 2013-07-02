@@ -83,6 +83,8 @@ typedef struct omap_i2c_bus
 	uint32_t functional_clock;
 	uint32_t module_clock;
 	int irq;
+	int irq_hook_id;
+	int irq_hook_kernel_id;
 } omap_i2c_bus_t;
 
 /* Define the registers for each chip */
@@ -151,13 +153,13 @@ static omap_i2c_regs_t dm37xx_i2c_regs = {
 static omap_i2c_bus_t am335x_i2c_buses[] = {
 	{am335x, AM335X_I2C0_BASE, AM335X_I2C0_SIZE, 0, &am335x_i2c_regs,
 		    AM335X_FUNCTIONAL_CLOCK, AM335X_MODULE_CLOCK,
-	    AM335X_I2C0_IRQ},
+	    AM335X_I2C0_IRQ, 1, 1},
 	{am335x, AM335X_I2C1_BASE, AM335X_I2C1_SIZE, 0, &am335x_i2c_regs,
 		    AM335X_FUNCTIONAL_CLOCK, AM335X_MODULE_CLOCK,
-	    AM335X_I2C1_IRQ},
+	    AM335X_I2C1_IRQ, 2, 3},
 	{am335x, AM335X_I2C2_BASE, AM335X_I2C2_SIZE, 0, &am335x_i2c_regs,
 		    AM335X_FUNCTIONAL_CLOCK, AM335X_MODULE_CLOCK,
-	    AM335X_I2C2_IRQ}
+	    AM335X_I2C2_IRQ, 3, 3}
 };
 
 #define AM335X_OMAP_NBUSES (sizeof(am335x_i2c_buses) / sizeof(omap_i2c_bus_t))
@@ -165,13 +167,13 @@ static omap_i2c_bus_t am335x_i2c_buses[] = {
 static omap_i2c_bus_t dm37xx_i2c_buses[] = {
 	{dm37xx, DM37XX_I2C0_BASE, DM37XX_I2C0_SIZE, 0, &dm37xx_i2c_regs,
 		    DM37XX_FUNCTIONAL_CLOCK, DM37XX_MODULE_CLOCK,
-	    DM37XX_I2C0_IRQ},
+	    DM37XX_I2C0_IRQ, 1, 1},
 	{dm37xx, DM37XX_I2C1_BASE, DM37XX_I2C1_SIZE, 0, &dm37xx_i2c_regs,
 		    DM37XX_FUNCTIONAL_CLOCK, DM37XX_MODULE_CLOCK,
-	    DM37XX_I2C1_IRQ},
+	    DM37XX_I2C1_IRQ, 2, 2},
 	{dm37xx, DM37XX_I2C2_BASE, DM37XX_I2C2_SIZE, 0, &dm37xx_i2c_regs,
 		    DM37XX_FUNCTIONAL_CLOCK, DM37XX_MODULE_CLOCK,
-	    DM37XX_I2C2_IRQ}
+	    DM37XX_I2C2_IRQ, 3, 3}
 };
 
 #define DM37XX_OMAP_NBUSES (sizeof(dm37xx_i2c_buses) / sizeof(omap_i2c_bus_t))
@@ -203,6 +205,7 @@ static int omap_i2c_soft_reset(void);
 static void omap_i2c_bus_init(void);
 static void omap_i2c_padconf(int i2c_bus_id);
 static void omap_i2c_clkconf(int i2c_bus_id);
+static void omap_i2c_intr_enable(void);
 static uint16_t omap_i2c_read_status(void);
 static void omap_i2c_write_status(uint16_t mask);
 static int omap_i2c_read(uint16_t addr, uint8_t * buf, size_t buflen);
@@ -231,6 +234,8 @@ omap_i2c_process(minix_i2c_ioctl_exec_t * ioctl_exec)
 	if (ioctl_exec->iie_buflen == 0) {
 		return EINVAL;
 	}
+
+	/* TODO handle netbsd /dev interface option to send with/without STOP */
 
 	if (ioctl_exec->iie_cmdlen > 0) {
 		r = omap_i2c_write(ioctl_exec->iie_addr, ioctl_exec->iie_cmd, ioctl_exec->iie_cmdlen);
@@ -328,7 +333,7 @@ omap_i2c_claim_bus(void)
 			return 0;	/* bus is free */
 		}
 
-		micro_delay(250);
+		micro_delay(1000);
 	}
 
 	return -1;		/* timeout expired */
@@ -401,6 +406,7 @@ omap_i2c_padconf(int i2c_bus_id)
 			    pinopts);
 			padconf_set(CONTROL_CONF_I2C0_SCL, 0xffffffff,
 			    pinopts);
+			log_info(&log, "pinopts=%x\n", pinopts);
 			break;
 
 		case 1:
@@ -408,6 +414,7 @@ omap_i2c_padconf(int i2c_bus_id)
 			padconf_set(CONTROL_CONF_SPI0_CS0, 0xffffffff,
 			    pinopts);
 			padconf_set(CONTROL_CONF_SPI0_D1, 0xffffffff, pinopts);
+			log_info(&log, "pinopts=%x\n", pinopts);
 			break;
 
 		case 2:
@@ -416,6 +423,7 @@ omap_i2c_padconf(int i2c_bus_id)
 			    0xffffffff, pinopts);
 			padconf_set(CONTROL_CONF_UART1_RTSN,
 			    0xffffffff, pinopts);
+			log_info(&log, "pinopts=%x\n", pinopts);
 			break;
 
 		default:
@@ -491,50 +499,28 @@ omap_i2c_soft_reset(void)
 	return EIO;
 }
 
+
 static void
-omap_i2c_bus_init(void)
+omap_i2c_intr_enable(void)
 {
-	int intmask;
+	uint16_t intmask;
+	static int enabled = 0;
 
-	/* Ensure i2c module is disabled before setting prescalar & bus speed */
-	reg_write(omap_i2c_bus->regs->I2C_CON, 0);
-	micro_delay(50000);
 
-	/* Disable autoidle */
-	reg_clear_bit(omap_i2c_bus->regs->I2C_SYSC, AUTOIDLE);
-
-	/* Set prescalar to obtain 12 MHz i2c module clock */
-	reg_write(omap_i2c_bus->regs->I2C_PSC,
-	    ((omap_i2c_bus->functional_clock / omap_i2c_bus->module_clock) -
-		1));
-
-	/* Set the bus speed to 100 KHz; some driver sources mention
-	 * that other speeds can cause problems for certain devices on the bus.
-	 *
-	 * Follow NetBSD and u-boot by using trim of 6 and 6 instead of TRM
-	 * suggested values 7 and 5.
-	 */
-	reg_write(omap_i2c_bus->regs->I2C_SCLL,
-	    ((omap_i2c_bus->module_clock / (2 * BUS_SPEED_100KHz)) - 6));
-	reg_write(omap_i2c_bus->regs->I2C_SCLH,
-	    ((omap_i2c_bus->module_clock / (2 * BUS_SPEED_100KHz)) - 6));
-
-	/* Set own I2C address */
-	if (omap_i2c_bus->bus_type == am335x) {
-		reg_write(omap_i2c_bus->regs->I2C_OA, I2C_OWN_ADDRESS);
-	} else if (omap_i2c_bus->bus_type == dm37xx) {
-		reg_write(omap_i2c_bus->regs->I2C_OA0, I2C_OWN_ADDRESS);
-	} else {
-		log_warn(&log, "Don't know how to set own address.\n");
+	if (!enabled) {
+		if (sys_irqsetpolicy(omap_i2c_bus->irq, 0,
+		    &omap_i2c_bus->irq_hook_kernel_id) != OK) {
+			log_warn(&log, "Couldn't set irq policy\n");
+		} else {
+			if (sys_irqenable(&omap_i2c_bus->irq_hook_kernel_id) != OK)  {
+				log_warn(&log, "Couldn't enable irq %d (hooked)\n",
+					omap_i2c_bus->irq);
+			}
+		
+		}
+		enabled = 1;
 	}
 
-	/* Bring the i2c module out of reset */
-	reg_set_bit(omap_i2c_bus->regs->I2C_CON, I2C_EN);
-	micro_delay(50000);
-
-	/*
-	 * Enable interrupts
-	 */
 
 	/* According to NetBSD driver and u-boot, these are needed even
 	 * if just using polling (i.e. non-interrupt driver programming).
@@ -555,6 +541,52 @@ omap_i2c_bus_init(void)
 	} else {
 		log_warn(&log, "Don't know how to enable interrupts.\n");
 	}
+}
+
+static void
+omap_i2c_bus_init(void)
+{
+
+	/* Ensure i2c module is disabled before setting prescalar & bus speed */
+	reg_write(omap_i2c_bus->regs->I2C_CON, 0);
+	micro_delay(50000);
+
+	/* Disable autoidle */
+	reg_clear_bit(omap_i2c_bus->regs->I2C_SYSC, AUTOIDLE);
+
+	/* Set prescalar to obtain 12 MHz i2c module clock */
+	reg_write(omap_i2c_bus->regs->I2C_PSC,
+	    ((omap_i2c_bus->functional_clock / omap_i2c_bus->module_clock) -
+		1));
+
+	/* Set the bus speed to 100 KHz; some driver sources mention
+	 * that other speeds can cause problems for certain devices on the bus.
+	 */
+	reg_write(omap_i2c_bus->regs->I2C_SCLL,
+	    ((omap_i2c_bus->module_clock / (2 * BUS_SPEED_100KHz)) - 7));
+	reg_write(omap_i2c_bus->regs->I2C_SCLH,
+	    ((omap_i2c_bus->module_clock / (2 * BUS_SPEED_100KHz)) - 5));
+
+	/* Set own I2C address */
+	if (omap_i2c_bus->bus_type == am335x) {
+		reg_write(omap_i2c_bus->regs->I2C_OA, I2C_OWN_ADDRESS);
+	} else if (omap_i2c_bus->bus_type == dm37xx) {
+		reg_write(omap_i2c_bus->regs->I2C_OA0, I2C_OWN_ADDRESS);
+	} else {
+		log_warn(&log, "Don't know how to set own address.\n");
+	}
+
+	/* Set TX/RX Threshold to 1 and disable I2C DMA */
+	reg_write(omap_i2c_bus->regs->I2C_BUF, 0x0000);
+
+	/* Bring the i2c module out of reset */
+	reg_set_bit(omap_i2c_bus->regs->I2C_CON, I2C_EN);
+	micro_delay(50000);
+
+	/*
+	 * Enable interrupts
+	 */
+	omap_i2c_intr_enable();
 }
 
 static uint16_t
@@ -632,9 +664,11 @@ omap_i2c_read(uint16_t addr, uint8_t * buf, size_t buflen)
 		/* Data to read? */
 		r = omap_i2c_poll(pollmask | errmask);
 		if ((r & errmask) != 0) {
+			log_warn(&log, "Read Error! Status=%x\n", r);
 			omap_i2c_release_bus();
 			return EIO;
 		} else if ((r & pollmask) == 0) {
+			log_warn(&log, "No RRDY Interrupt. Status=%x\n", r);
 			omap_i2c_release_bus();
 			return EBUSY;
 		}
@@ -648,6 +682,7 @@ omap_i2c_read(uint16_t addr, uint8_t * buf, size_t buflen)
 
 	r = omap_i2c_read_status();
 	if ((r & (1<<NACK)) != 0) {
+		log_warn(&log, "NACK\n");
 		omap_i2c_release_bus();
 		return EIO;
 	}
@@ -702,9 +737,11 @@ omap_i2c_write(uint16_t addr, const uint8_t * buf, size_t buflen)
 		/* Ready to write? */
 		r = omap_i2c_poll(pollmask | errmask);
 		if ((r & errmask) != 0) {
+			log_warn(&log, "Write Error! Status=%x\n", r);
 			omap_i2c_release_bus();
 			return EIO;
 		} else if ((r & pollmask) == 0) {
+			log_warn(&log, "Not ready for write? Status=%x\n", r);
 			omap_i2c_release_bus();
 			return EBUSY;
 		}

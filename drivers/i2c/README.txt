@@ -38,9 +38,9 @@ Starting up the instances:
 
 There is an i2cscan program which can detect devices on the bus:
 
-i2cscan /dev/i2c-1
-i2cscan /dev/i2c-2
-i2cscan /dev/i2c-3
+i2cscan -r /dev/i2c-1
+i2cscan -r /dev/i2c-2
+i2cscan -r /dev/i2c-3
 
 Limitations
 -----------
