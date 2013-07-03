@@ -232,7 +232,7 @@ sef_cb_init(int type, sef_init_info_t * UNUSED(info))
 	case SEF_INIT_FRESH:
 		/* Select the correct i2c Implementation for this SoC */
 #if defined(AM335X) || defined(DM37XX)
-		r = omap_interface_setup(&process, i2c_bus_id);
+		r = omap3_interface_setup(&process, i2c_bus_id);
 		if (r != OK) {
 			return r;
 		}

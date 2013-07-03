@@ -6,7 +6,7 @@
 
 #ifndef __ASSEMBLY__
 
-int omap_interface_setup(int (**process)(minix_i2c_ioctl_exec_t *ioctl_exec), int i2c_bus_id);
+int omap3_interface_setup(int (**process)(minix_i2c_ioctl_exec_t *ioctl_exec), int i2c_bus_id);
 
 #endif /* !__ASSEMBLY__ */
 
